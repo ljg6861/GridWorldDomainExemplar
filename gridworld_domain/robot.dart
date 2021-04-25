@@ -20,6 +20,7 @@ class Robot {
     this._currentTile = newTile;
   }
 
+  //returns reward
   int moveFromCurrentTileInDirection(Direction direction) {
     GridWorldTile nextTile;
     switch (direction) {
@@ -46,21 +47,22 @@ class Robot {
       }
       return 0;
     } else {
-      return -10 + this._currentTile.state == 21 ? -10 : 0;
+      return -10;
     }
   }
 
-  int randomlyAdvanceToTile(Random random) {
+  //returns reward
+  List randomlyAdvanceToTile(Random random) {
     final mappedStatusAndDirection = getStatusAndDirection(random);
     final randomStatus = mappedStatusAndDirection['status'];
-    if (randomStatus == RandomStatus.breakdown) {
-      return -10 + this._currentTile.state == 21 ? -10 : 0;
-    }
     Direction direction = mappedStatusAndDirection['direction'];
+    if (randomStatus == RandomStatus.breakdown) {
+      return [-10 + this._currentTile.state == 21 ? -10 : 0, direction];
+    }
     if (randomStatus != null) {
       direction = switchDirectionBasedOnStatus(direction, randomStatus);
     }
-    return moveFromCurrentTileInDirection(direction);
+    return [moveFromCurrentTileInDirection(direction), direction];
   }
 
   Direction switchDirectionBasedOnStatus(Direction direction, RandomStatus status) {
@@ -124,5 +126,45 @@ class Robot {
       randomStatus = RandomStatus.breakdown;
     }
     return {'status': randomStatus, 'direction': direction};
+  }
+
+  double computeStateValue(GridWorldTile tile, Map<String, Map<GridWorldTile, int>> transits,
+      Map<String, double> rewards, Map<GridWorldTile, double> values, Direction direction) {
+    Map<GridWorldTile, int> targetCount = transits[tile.state.toString() + direction.toString()];
+    Iterable<int> valuesIterable = targetCount.values;
+    int total = 0;
+    valuesIterable.toList().forEach((element) {
+      total += element;
+    });
+    double value = 0;
+    targetCount.entries.forEach((mapEntry) {
+      GridWorldTile targetTile = mapEntry.key;
+      double reward = rewards[tile.state.toString() + direction.toString() + targetTile.state.toString()];
+      double compute = reward + 0.5 * values[targetTile];
+      value += (mapEntry.value / total) * compute;
+    });
+    return value;
+  }
+
+  double optimallyAdvanceToTile(Map<String, Map<GridWorldTile, int>> transits,
+      Map<String, double> rewards, Map<GridWorldTile, double> values,){
+    Direction bestDirection = null;
+    double bestValue = double.negativeInfinity;
+    Direction.values.forEach((direction) {
+      double stateValue = computeStateValue(this._currentTile, transits, rewards, values, direction);
+      if (stateValue > bestValue){
+        bestValue = stateValue;
+        bestDirection = direction;
+      }
+    });
+    final mappedStatusAndDirection = getStatusAndDirection(Random());
+    final randomStatus = mappedStatusAndDirection['status'];
+    if (randomStatus == RandomStatus.breakdown) {
+      return -10;
+    }
+    if (randomStatus != null) {
+      bestDirection = switchDirectionBasedOnStatus(bestDirection, randomStatus);
+    }
+    return this.moveFromCurrentTileInDirection(bestDirection).toDouble();
   }
 }
